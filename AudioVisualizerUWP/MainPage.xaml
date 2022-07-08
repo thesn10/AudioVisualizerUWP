@@ -1,0 +1,202 @@
+﻿<Page
+    x:Class="AudioVisualizerUWP.MainPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:AudioVisualizerUWP"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <RelativePanel Name="rootp" Margin="0,0,0,0" VerticalAlignment="Stretch">
+        <Grid x:Name="Output" Grid.Row="1" Margin="0,0,0,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <Polyline 
+                x:Name="polyline" 
+                Stroke="#FF0000" 
+                StrokeThickness="1" 
+                Margin="100,0,0,-1000"
+                Height="200" 
+                HorizontalAlignment="Left" 
+                VerticalAlignment="Top" 
+                Width="200"
+                />
+        </Grid>
+        <Button
+            RelativePanel.Below="Output"
+            Margin="20,332,0,0"
+            Width="200"
+            Height="50"
+            Click="Button_Click" HorizontalAlignment="Left" VerticalAlignment="Top">
+            Start
+        </Button>
+        <ToggleSwitch 
+            Name="tsFFT"
+            Header="FFT" 
+            HorizontalAlignment="Left" 
+            Height="54.6667" 
+            Margin="20,17,0,0" 
+            VerticalAlignment="Top" 
+            Width="154"
+            IsOn="True"
+            Toggled="TsFFT_Toggled"/>
+        <ToggleSwitch 
+            Name="tsLog"
+            Header="Logarythmic Scale" 
+            HorizontalAlignment="Left" 
+            Height="54.6667" 
+            Margin="20,94,0,0" 
+            VerticalAlignment="Top" 
+            Width="154"
+            IsOn="True"
+            Toggled="TsLog_Toggled"/>
+        <ToggleSwitch 
+            Header="Display Mode" 
+            Name="tsDmode"
+            HorizontalAlignment="Left" 
+            Height="54.6667" 
+            Margin="20,171,0,0" 
+            VerticalAlignment="Top" 
+            Width="154"
+            OffContent="Bands"
+            OnContent="Polyline"/>
+        <Button 
+            Click="Button_Click_1"  
+            Content="Clear" 
+            HorizontalAlignment="Left" 
+            Height="54" 
+            Margin="242,330,0,0" 
+            VerticalAlignment="Top" 
+            Width="196"/>
+        <Button 
+            Click="BtnUpdate_Click"
+            Name="btnUpdate"  
+            Content="Stop" 
+            HorizontalAlignment="Left" 
+            Height="54" 
+            Margin="465,332,0,0" 
+            VerticalAlignment="Top" 
+            Width="196"/>
+        <TextBox 
+            Name="txtFFTBuffer"
+            HorizontalAlignment="Left" 
+            Height="55" 
+            Margin="226,17,0,0" 
+            Text="4096" 
+            VerticalAlignment="Top" 
+            Width="200"
+            Header="FFTBufferSize"/>
+        <TextBox 
+            Name="txtFFTSize"
+            HorizontalAlignment="Left" 
+            Height="55" 
+            Margin="226,94,0,0" 
+            Text="4096" 
+            VerticalAlignment="Top" 
+            Width="200"
+            Header="FFTSize"/>
+
+        <TextBox 
+            Name="txtBandNum"
+            HorizontalAlignment="Left" 
+            Height="55" 
+            Margin="226,171,0,0" 
+            Text="480" 
+            VerticalAlignment="Top" 
+            Width="200"
+            Header="Bands"/>
+        <TextBox 
+            x:Name="txtAttack"
+            HorizontalAlignment="Left" 
+            Height="55" 
+            Margin="461,17,0,0" 
+            Text="0" 
+            VerticalAlignment="Top" 
+            Width="200"
+            Header="Attack"/>
+        <TextBox 
+            x:Name="txtDecay"
+            HorizontalAlignment="Left" 
+            Height="55" 
+            Margin="461,94,0,0" 
+            Text="0" 
+            VerticalAlignment="Top" 
+            Width="200"
+            Header="Decay"/>
+        <TextBox 
+            x:Name="txtFreqMax"
+            HorizontalAlignment="Left" 
+            Height="55" 
+            Margin="697,94,0,0" 
+            Text="0" 
+            VerticalAlignment="Top" 
+            Width="200"
+            Header="FreqMax"/>
+        <TextBox 
+            x:Name="txtFreqMin"
+            HorizontalAlignment="Left" 
+            Height="55" 
+            Margin="697,17,0,0" 
+            Text="0" 
+            VerticalAlignment="Top" 
+            Width="200"
+            Header="FreqMin"/>
+        <ComboBox 
+            x:Name="cbFFTEngine"
+            HorizontalAlignment="Left" 
+            Height="55" 
+            Margin="465,171,0,0" 
+            VerticalAlignment="Top" 
+            Width="200"
+            Header="FFTEngine" SelectedIndex="0">
+            <ComboBoxItem Content="KissFFT"/>
+            <ComboBoxItem Content="LomontFFT"/>
+        </ComboBox>
+        <ComboBox 
+            x:Name="cbWaveWindow"
+            HorizontalAlignment="Left" 
+            Height="55" 
+            Margin="697,171,0,0" 
+            VerticalAlignment="Top" 
+            Width="200"
+            Header="WaveWindow" SelectedIndex="1">
+            <ComboBoxItem Content="None"/>
+            <ComboBoxItem Content="Hamming"/>
+            <ComboBoxItem Content="Hann"/>
+            <ComboBoxItem Content="BlackmannHarris"/>
+        </ComboBox>
+        <TextBlock 
+            HorizontalAlignment="Left" 
+            Height="50" 
+            Margin="697,332,0,0" 
+            Text="Elapsed Time:" 
+            Name="lblElapsed"
+            TextWrapping="WrapWholeWords" 
+            VerticalAlignment="Top"
+            Width="200"/>
+        <StackPanel Orientation="Vertical" Margin="20,249,-20,-249" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+            <RadioButton 
+                Content="System Audio" 
+                Tag="System" 
+                Checked="RadioButton_Checked"
+                IsChecked="True"/>
+            <RadioButton 
+                Content="Audio File" 
+                Tag="File" 
+                Checked="RadioButton_Checked"/>
+        </StackPanel>
+        <TextBox 
+            x:Name="txtSensitivity"
+            HorizontalAlignment="Left" 
+            Height="55" 
+            Margin="226,249,0,0" 
+            Text="46" 
+            VerticalAlignment="Top" 
+            Width="200"
+            Header="Sensitivity"/>
+
+
+    </RelativePanel>
+</Page>
