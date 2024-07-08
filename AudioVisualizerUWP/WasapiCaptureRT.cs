@@ -305,6 +305,7 @@ namespace NAudio.Wave
         private void PrepareRecording()
         {
             fftScalar = (1.0 / Math.Sqrt(fftSize));
+            fftBufIndex = 0;
 
             if (Bands != 0)
             {
@@ -454,7 +455,15 @@ namespace NAudio.Wave
                             double L = totalFrames[iFrame];
                             double R = totalFrames[iFrame + 1];
 
-                            fftCircularBuffer[fftBufIndex] = (L + R) / 2;
+                            try
+                            {
+                                fftCircularBuffer[fftBufIndex] = (L + R) / 2;
+                            }
+                            catch (IndexOutOfRangeException)
+                            {
+                                fftBufIndex = 0;
+                                fftCircularBuffer[fftBufIndex] = (L + R) / 2;
+                            }
                         }
                         else
                         {
@@ -645,30 +654,61 @@ namespace NAudio.Wave
                 }
             }*/
 
-            int iBin = (int)((freqMin / df) - 0.5);
-            int iBand = 0;
-            double f0 = freqMin;
-
-            //LinToLog(m_bandOut, audioData, logFreqs, ref f0, bandoffset);
-
-
-            while (iBin <= (fftBufferSize * 0.5) && iBand < Bands)
+            if (UseLogScale)
             {
-                //Debug.WriteLine("YE" + iBand + ", ofb:" + (iBand + offset));
-                double fLin1 = (iBin + 0.5) * df;   //linear freq.
-                double fLog1 = m_bandFreq[iBand]; //logarythmic freq.
 
-                if (fLin1 <= fLog1)
+                int iBin = (int)((freqMin / df) - 0.5);
+                int iBand = 0;
+                double f0 = freqMin;
+
+                //LinToLog(m_bandOut, audioData, logFreqs, ref f0, bandoffset);
+
+
+                while (iBin <= (fftBufferSize * 0.5) && iBand < Bands)
                 {
-                    m_bandOut[iBand] += (fLin1 - f0) * audioData[iBin] * bandScalar;
-                    f0 = fLin1;
-                    iBin += 1;
+                    //Debug.WriteLine("YE" + iBand + ", ofb:" + (iBand + offset));
+                    double fLin1 = (iBin + 0.5) * df;   //linear freq.
+                    double fLog1 = m_bandFreq[iBand]; //logarythmic freq.
+
+                    if (fLin1 <= fLog1)
+                    {
+                        m_bandOut[iBand] += (fLin1 - f0) * audioData[iBin] * bandScalar;
+                        f0 = fLin1;
+                        iBin += 1;
+                    }
+                    else
+                    {
+                        m_bandOut[iBand] += (fLog1 - f0) * audioData[iBin] * bandScalar;
+                        f0 = fLog1;
+                        iBand += 1;
+                    }
                 }
-                else
+            }
+            else
+            {
+                int iBinn = (int)((freqMin / df) - 0.5);
+                int iBandn = 0;
+                double f0n = freqMin;
+                double vPerBand = (freqMax - freqMin) / Bands;
+
+                while (iBinn <= (fftBufferSize * 0.5) && iBandn < Bands)
                 {
-                    m_bandOut[iBand] += (fLog1 - f0) * audioData[iBin] * bandScalar;
-                    f0 = fLog1;
-                    iBand += 1;
+                    double fLin1 = (iBinn + 0.5) * df;
+                    double fLog1 = vPerBand * iBandn;
+
+                    if (fLin1 < fLog1)
+                    {
+                        m_bandOut[iBandn] += (fLin1 - f0n) * audioData[iBinn] * bandScalar;
+                        f0n = fLin1;
+                        iBinn += 1;
+                    }
+                    else
+                    {
+                        m_bandOut[iBandn] += (fLog1 - f0n) * audioData[iBinn] * bandScalar;
+                        //m_bandOut[iBandn] /= vPerBand;
+                        f0n = fLog1;
+                        iBandn += 1;
+                    }
                 }
             }
 
@@ -758,12 +798,14 @@ namespace NAudio.Wave
                 }
             }*/
 
+
             for (int i = 0; i < m_bandOut.Length; i++)
             {
                 //Debug.WriteLine("ad" +audioData[i]);
                 m_bandOut[i] = Math.Max(0, sensitivity * Math.Log10(Clamp01(m_bandOut[i])) + 1.0);
                 //Debug.WriteLine("Log10(" + m_bandOut[i] + ") = " + sensitivity * Math.Log10(m_bandOut[i]) + ", BendLogValue: " + blv);
             }
+            
 
             watch.Stop();
             //Debug.WriteLine(fftBufIndex + ", " + m_bandOut.Length);
@@ -923,7 +965,7 @@ namespace NAudio.Wave
 
 
         public bool UseFFT { get; set; } = true;
-        public bool UseLogScale { get; set; } = false;
+        public bool UseLogScale { get; set; } = true;
 
         public int Bands
         {
