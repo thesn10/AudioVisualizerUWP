@@ -1,29 +1,351 @@
-﻿// Code to implement decently performing FFT for complex and real valued                                         
-// signals. See www.lomont.org for a derivation of the relevant algorithms                                       
-// from first principles. Copyright Chris Lomont 2010-2012.                                                      
-// This code and any ports are free for all to use for any reason as long                                        
-// as this header is left in place.                                                                              
-// Version 1.1, Sept 2011                                                                                        
-using System;
+﻿using System;
+using System.Collections.Generic;
+using System.Text;
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.WindowsRuntime;
+using System.Linq;
 
-/* History:                                                                                                      
- * Sep 2011 - v1.1 - added parameters to support various sign conventions                                        
- *                   set via properties A and B.                                                                 
- *                 - Removed dependencies on LINQ and generic collections.                                       
- *                 - Added unit tests for the new properties.                                                    
- *                 - Switched UnitTest to static.                                                                
- * Jan 2010 - v1.0 - Initial release                                                                             
- */
 namespace AudioVisualizerUWP
 {
-    /// <summary>                                                                                                
-    /// Represent a class that performs real or complex valued Fast Fourier                                      
-    /// Transforms. Instantiate it and use the FFT or TableFFT methods to                                        
-    /// compute complex to complex FFTs. Use FFTReal for real to complex                                         
-    /// FFTs which are much faster than standard complex to complex FFTs.                                        
-    /// Properties A and B allow selecting various FFT sign and scaling                                          
-    /// conventions.                                                                                             
-    /// </summary>                                                                                               
+    public enum FFTEngine
+    {
+        KissFFT,
+        LomontFFT,
+        NAudioFFT
+    }
+
+    public enum WFWindow
+    {
+        None,
+        HammingWindow,
+        HannWindow,
+        BlackmannHarrisWindow
+    }
+
+    public interface FFT
+    {
+        void FFT(double[] din, double[] dout);
+    }
+
+    public class LomFFT : FFT
+    {
+        private LomontFFT fft;
+
+        public LomFFT()
+        {
+            fft = new LomontFFT();
+        }
+
+        public void FFT(double[] din, double[] dout)
+        {
+            double[] tempin = new double[dout.Length * 2];
+            din.CopyTo(tempin, 0);
+            fft.RealFFT(tempin, true);
+
+            for (int i = 0; i < dout.Length * 2; i += 2)
+            {
+                //Debug.WriteLine("ffttemp: " + ffttemp[i*2] + ", log: " + Math.Log(ffttemp[i*2]));
+                System.Numerics.Complex c = new System.Numerics.Complex(tempin[i], tempin[i + 1]);
+                dout[i / 2] = c.Magnitude * 100;
+
+                dout[i] = (tempin[i] * tempin[i] + tempin[i + 1] * tempin[i + 1]) * 100;
+            }
+        }
+    }
+
+    public class KissFFTR : FFT
+    {
+        private IntPtr config;
+
+        public KissFFTR(int fftbuffersize)
+        {
+            config = UnsafeKissFFT.AllocReal(fftbuffersize, 0);
+        }
+
+        ~KissFFTR()
+        {
+            UnsafeKissFFT.Cleanup();
+        }
+
+        public void FFT(double[] din,double[] dout)
+        {
+            float[] fin = new float[dout.Length];
+            din.Select(x => (float)x).ToArray().CopyTo(fin, 0);
+
+            // Zero padding
+            for (int i = din.Length; i < dout.Length; i++)
+            {
+                fin[i] = 0;
+            }
+
+            UnsafeKissFFT.FFTR(config, fin, dout);
+        }
+    }
+
+    public class KissFFT : FFT
+    {
+        private IntPtr config;
+
+        public KissFFT(int fftbuffersize)
+        {
+            config = UnsafeKissFFT.Alloc(fftbuffersize, 0);
+        }
+
+        ~KissFFT()
+        {
+            UnsafeKissFFT.Cleanup();
+        }
+
+        public void FFT(double[] din,double[] dout)
+        {
+            float[] fin = din.Select(x => (float)x).ToArray();
+            UnsafeKissFFT.FFT(config, fin, dout);
+        }
+    }
+
+    unsafe internal class UnsafeKissFFT
+    {
+
+#if X64
+        [DllImport(@"KissFFT64.dll", EntryPoint = "KISS_Alloc", SetLastError = false, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr Alloc(int nfft, int inverse_fft);
+
+        [DllImport(@"KissFFT64.dll", EntryPoint = "KISS_AllocR", SetLastError = false, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr AllocReal(int nfft, int inverse_fft);
+
+        [DllImport(@"KissFFT64.dll", EntryPoint = "KISS_FFT", SetLastError = false, CallingConvention = CallingConvention.Cdecl)]
+        static extern void Kiss_FFT(IntPtr cfg, Complex* fin, Complex* fout);
+
+        [DllImport(@"KissFFT64.dll", EntryPoint = "KISS_FFTR", SetLastError = false, CallingConvention = CallingConvention.Cdecl)]
+        static extern void Kiss_FFTR(IntPtr cfg, float* fin, Complex* fout);
+
+        [DllImport(@"KissFFT64.dll", EntryPoint = "KISS_Cleanup", SetLastError = false, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void Cleanup();
+
+        [DllImport(@"KissFFT64.dll", EntryPoint = "KISS_NextFastSize", SetLastError = false, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int NextFastSize(int n);
+#else
+        [DllImport(@"KissFFT.dll", EntryPoint = "KISS_Alloc", SetLastError = false, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr Alloc(int nfft, int inverse_fft);
+
+        [DllImport(@"KissFFT.dll", EntryPoint = "KISS_AllocR", SetLastError = false, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr AllocReal(int nfft, int inverse_fft);
+
+        [DllImport(@"KissFFT.dll", EntryPoint = "KISS_FFT", SetLastError = false, CallingConvention = CallingConvention.Cdecl)]
+        static extern void Kiss_FFT(IntPtr cfg, Complex* fin, Complex* fout);
+
+        [DllImport(@"KissFFT.dll", EntryPoint = "KISS_FFTR", SetLastError = false, CallingConvention = CallingConvention.Cdecl)]
+        static extern void Kiss_FFTR(IntPtr cfg, float* fin, Complex* fout);
+
+        [DllImport(@"KissFFT.dll", EntryPoint = "KISS_Cleanup", SetLastError = false, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void Cleanup();
+
+        [DllImport(@"KissFFT.dll", EntryPoint = "KISS_NextFastSize", SetLastError = false, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int NextFastSize(int n);
+#endif
+
+        public static void FFT(IntPtr cfg, Complex[] fin, Complex[] fout)
+        {
+            fixed (Complex* inp = fin, outp = fout)
+            {
+                Kiss_FFT(cfg, inp, outp);
+            }
+        }
+
+        public static void FFTR(IntPtr cfg, float[] fin, Complex[] fout)
+        {
+            fixed (float* inp = fin)
+            {
+                fixed (Complex* outp = fout)
+                {
+                    Kiss_FFTR(cfg, inp, outp);
+                }
+            }
+        }
+
+        public static void FFTR(IntPtr cfg, float[] fin, double[] dfout)
+        {
+            Complex[] fout = new Complex[dfout.Length];
+
+            fixed (float* inp = fin)
+            {
+                fixed (Complex* outp = fout)
+                {
+                    Kiss_FFTR(cfg, inp, outp);
+                }
+            }
+
+            for (int i = 0; i < dfout.Length; i++)
+            {
+                //System.Numerics.Complex complex = new System.Numerics.Complex(fout[i].Real, fout[i].Imag);
+                //Debug.WriteLine("C1: " + fout[i].Real + ", C2: " + complex.Real);
+                //dfout[i] = complex.Magnitude;
+                dfout[i] = (fout[i].Real * fout[i].Real + fout[i].Imag * fout[i].Imag);
+            }
+        }
+
+        public static void FFT(IntPtr cfg, float[] dfin, double[] dfout)
+        {
+
+
+            Complex[] fin = dfin.Select(x => new Complex(x, 1)).ToArray();
+            Complex[] fout = new Complex[dfout.Length];
+
+            fixed (Complex* inp = fin, outp = fout)
+            {
+                Kiss_FFT(cfg, inp, outp);
+            }
+
+            for (int i = 0; i < dfout.Length; i++)
+            {
+                //System.Numerics.Complex complex = new System.Numerics.Complex(Convert.ToDouble(fout[i].Real), Convert.ToDouble(fout[i].Imag));
+                //dfout[i] = complex.Magnitude;
+                dfout[i] = (fout[i].Real * fout[i].Real + fout[i].Imag * fout[i].Imag);
+            }
+        }
+    }
+
+    [StructLayoutAttribute(LayoutKind.Sequential, Pack = 1)]
+    unsafe internal struct Complex
+    {
+        public float Real;
+        public float Imag;
+
+        public Complex(float real, float imag)
+        {
+            Real = real;
+            Imag = imag;
+        }
+
+        public static Complex operator -(Complex c1)
+        {
+            return new Complex(-c1.Real, -c1.Imag);
+        }
+
+        public static Complex operator +(Complex c1)
+        {
+            return new Complex(c1.Real, c1.Imag);
+        }
+
+        public static Complex operator +(Complex c1, Complex c2)
+        {
+            return new Complex(c1.Real + c2.Real, c1.Imag + c2.Imag);
+        }
+
+        public static Complex operator +(Complex c1, float c2)
+        {
+            return new Complex(c1.Real + c2, c1.Imag);
+        }
+
+        public static Complex operator +(Complex c1, int c2)
+        {
+            return new Complex(c1.Real + c2, c1.Imag);
+        }
+
+        public static Complex operator -(Complex c1, Complex c2)
+        {
+            return new Complex(c1.Real - c2.Real, c1.Imag - c2.Imag);
+        }
+
+        public static Complex operator *(Complex c1, Complex c2)
+        {
+            var r = c1.Real * c2.Real - c1.Imag * c2.Imag;
+            var i = c1.Real * c2.Imag + c1.Imag * c2.Real;
+            return new Complex(r, i);
+        }
+
+        public static Complex operator *(Complex c1, float c2)
+        {
+            return new Complex(c1.Real * c2, c1.Imag * c2);
+        }
+
+        public static Complex operator *(Complex c1, int c2)
+        {
+            return new Complex(c1.Real * c2, c1.Imag * c2);
+        }
+
+        public static Complex operator /(Complex c1, float c2)
+        {
+            return new Complex(c1.Real / c2, c1.Imag / c2);
+        }
+
+        public static Complex operator /(Complex c1, int c2)
+        {
+            return new Complex(c1.Real / c2, c1.Imag / c2);
+        }
+
+        public static implicit operator Complex(float rhs)
+        {
+            return new Complex(rhs, 0);
+        }
+
+        public override string ToString()
+        {
+            var r = Real;
+            var i = Imag;
+            if (Math.Abs(r) % 1.0 < 0.000000000001)
+                r = (float)Math.Round(r);
+            if (Math.Abs(i) % 1.0 < 0.000000000001)
+                i = (float)Math.Round(i);
+
+            if (i == 0)
+                return r.ToString();
+            else
+                return "(" + r + ", " + i + ")";
+        }
+
+        public static Complex I = new Complex(0, 1);
+
+        public static Complex CExp(float phase)
+        {
+            var x = Math.Cos(phase);
+            var y = Math.Sin(phase);
+            return new Complex((float)x, (float)y);
+        }
+
+        // ------------- fast operations -------------
+
+        public static void Multiply(ref Complex dest, ref Complex c1, ref Complex c2)
+        {
+            var r = c1.Real * c2.Real - c1.Imag * c2.Imag;
+            var i = c1.Real * c2.Imag + c1.Imag * c2.Real;
+            dest.Real = r;
+            dest.Imag = i;
+        }
+
+        public static void Add(ref Complex dest, ref Complex c1, ref Complex c2)
+        {
+            dest.Real = c1.Real + c2.Real;
+            dest.Imag = c1.Imag + c2.Imag;
+        }
+
+        public static void Subtract(ref Complex dest, ref Complex c1, ref Complex c2)
+        {
+            dest.Real = c1.Real - c2.Real;
+            dest.Imag = c1.Imag - c2.Imag;
+        }
+
+
+        public static void Multiply(ref Complex dest, ref Complex c1)
+        {
+            var r = dest.Real * c1.Real - dest.Imag * c1.Imag;
+            dest.Imag = dest.Real * c1.Imag + dest.Imag * c1.Real;
+            dest.Real = r;
+        }
+
+        public static void Add(ref Complex dest, ref Complex c1)
+        {
+            dest.Real += c1.Real;
+            dest.Imag += c1.Imag;
+        }
+
+        public static void Subtract(ref Complex dest, ref Complex c1)
+        {
+            dest.Real -= c1.Real;
+            dest.Imag -= c1.Imag;
+        }
+    }
+
     public class LomontFFT
     {
         /// <summary>                                                                                            
@@ -266,7 +588,7 @@ namespace AudioVisualizerUWP
             B = 1;
         }
 
-        #region Internals                                                                                        
+#region Internals                                                                                        
 
         /// <summary>                                                                                            
         /// Scale data using n samples for forward and inverse transforms as needed                              
@@ -390,7 +712,7 @@ namespace AudioVisualizerUWP
         double[] cosTable;
         double[] sinTable;
 
-        #endregion
+#endregion
 
     }
 }

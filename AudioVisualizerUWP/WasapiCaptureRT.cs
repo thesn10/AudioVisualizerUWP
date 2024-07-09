@@ -248,7 +248,8 @@ namespace NAudio.Wave
                     {
                         if (NativeMethods.WaitForSingleObjectEx(hEvent, 100, true) != 0)
                         {
-                            throw new Exception("Capture event timeout");
+                            continue;
+                            //throw new Exception("Capture event timeout");
                         }
                     }
 
